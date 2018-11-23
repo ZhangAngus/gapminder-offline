@@ -15,7 +15,7 @@ import { MessageService } from '../../message.service';
 import { Subscription } from 'rxjs/Subscription';
 import {
   CLEAR_EDITABLE_TABS_ACTION, TABS_LOGO_ACTION, TABS_ADD_TAB_ACTION, SWITCH_MENU_ACTION,
-  MODEL_CHANGED
+  MODEL_CHANGED, SET_ACTIVE_TAB, REMOVE_TAB
 } from '../../constants';
 
 const TAB_TIMEOUT = 100;
@@ -52,6 +52,59 @@ export class TabsNewComponent implements AfterViewInit, OnDestroy {
             this.resetEditMode();
           }
         }
+
+        if (event.message === SET_ACTIVE_TAB) {
+          const selectedTab = event.options;
+
+          if (!this.disabled) {
+            let editModeFired = false;
+
+            this.tabs.forEach((tab: TabNewComponent) => {
+              if (selectedTab !== tab && tab.active) {
+                tab.deselect.emit(tab);
+                tab.active = false;
+              }
+
+              if (selectedTab === tab && tab.active) {
+                tab.editMode = true;
+                editModeFired = true;
+              }
+            });
+
+            selectedTab.active = true;
+            selectedTab.select.emit(selectedTab);
+
+            if (!editModeFired) {
+              this.resetEditMode();
+            }
+          }
+
+          this.messageService.sendMessage(MODEL_CHANGED);
+        }
+
+        if (event.message === REMOVE_TAB) {
+          const tab = event.options;
+          const tabsAsArray: TabNewComponent[] = this.getTabsAsArray();
+          const index = tabsAsArray.indexOf(tab);
+
+          if (index === -1) {
+            return;
+          }
+
+          let newActiveIndex = -1;
+
+          if (this.tabs.length > 1) {
+            newActiveIndex = this.getClosestTabIndex(index);
+
+            if (newActiveIndex >= 0) {
+              // this.syncActions.onSetTabActive(newActiveIndex);
+              this.selectTab(tabsAsArray[newActiveIndex]);
+            }
+          }
+
+          tab.remove.emit({tab: this.tabs[index], newActiveIndex});
+          this.syncActions.onTabRemove(index);
+        }
       });
   }
 
@@ -84,53 +137,12 @@ export class TabsNewComponent implements AfterViewInit, OnDestroy {
   }
 
   selectTab(selectedTab: TabNewComponent) {
-    if (!this.disabled) {
-      let editModeFired = false;
-
-      this.tabs.forEach((tab: TabNewComponent) => {
-        if (selectedTab !== tab && tab.active) {
-          tab.deselect.emit(tab);
-          tab.active = false;
-        }
-
-        if (selectedTab === tab && tab.active) {
-          tab.editMode = true;
-          editModeFired = true;
-        }
-      });
-
-      selectedTab.active = true;
-      selectedTab.select.emit(selectedTab);
-
-      if (!editModeFired) {
-        this.resetEditMode();
-      }
-    }
-
-    this.messageService.sendMessage(MODEL_CHANGED);
+    this.messageService.sendMessage(SET_ACTIVE_TAB, selectedTab);
   }
 
   removeTab(tab: TabNewComponent) {
     if (!this.disabled) {
-      const tabsAsArray: TabNewComponent[] = this.getTabsAsArray();
-      const index = tabsAsArray.indexOf(tab);
-
-      if (index === -1) {
-        return;
-      }
-
-      let newActiveIndex = -1;
-
-      if (this.tabs.length > 1) {
-        newActiveIndex = this.getClosestTabIndex(index);
-
-        if (newActiveIndex >= 0) {
-          this.syncActions.onSetTabActive(newActiveIndex);
-        }
-      }
-
-      tab.remove.emit({tab: this.tabs[index], newActiveIndex});
-      this.syncActions.onTabRemove(index);
+      this.messageService.sendMessage(REMOVE_TAB, tab);
     }
   }
 
